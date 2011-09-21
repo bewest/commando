@@ -25,15 +25,22 @@ __all__ = ['command',
            'append_const',
            'Application']
 
+def add_arguments(parser, params):
+    """
+    Adds parameters to the parser
+    """
+    for parameter in params:
+        parser.add_argument(*parameter.args, **parameter.kwargs)
+
 class Commando(type):
     """
     Meta class that enables declarative command definitions
     """
 
     def __new__(mcs, name, bases, attrs):
-        instance = super(Commando, mcs).__new__(mcs, name, bases, attrs)
-        subcommands = []
+        instance     = super(Commando, mcs).__new__(mcs, name, bases, attrs)
         main_command = None
+        subcommands  = [ ]
         for name, member in attrs.iteritems():
             if hasattr(member, "command"):
                 main_command = member
@@ -41,12 +48,6 @@ class Commando(type):
                 subcommands.append(member)
         main_parser = None
 
-        def add_arguments(parser, params):
-            """
-            Adds parameters to the parser
-            """
-            for parameter in params:
-                parser.add_argument(*parameter.args, **parameter.kwargs)
 
         if main_command:
             main_parser = ArgumentParser(*main_command.command.args,
@@ -65,8 +66,53 @@ class Commando(type):
         instance.__main__ = main_command
         return instance
 
+class Extent(type):
+    """
+    Meta class that enables declarative command definitions
+    """
+
+    def __new__(mcs, name, bases, attrs):
+        instance     = super(Extent, mcs).__new__(mcs, name, bases, attrs)
+        subcommands  = getattr(instance, '__subcommands__', [ ])
+        main_command = None
+        # scan for decorated items, and mark them up for the subclass to
+        # process
+        for name, member in attrs.iteritems():
+            if hasattr(member, "command"):
+                main_command = member
+            elif hasattr(member, "subcommand"):
+                subcommands.append(member)
+        main_parser = None
+
+
+        instance.__subcommands__ = subcommands
+        instance.__parser__      = main_parser
+        instance.__main__        = main_command
+        return instance
+
 values = namedtuple('__meta_values', 'args, kwargs')
 
+class Base(object):
+  def __init__(self):
+    self.setup_parser( )
+
+  def setup_parser(self):
+    main_command = self.__main__
+    main_parser  = ArgumentParser(*main_command.command.args,
+                                 **main_command.command.kwargs)
+    add_arguments(main_parser, getattr(main_command, 'params', []))
+    self.__parser__ = main_parser
+
+class Subcommands(Base):
+  def setup_parser(self):
+    super(Subcommands, self).setup_parser( )
+    main_parser = self.__parser__
+    subparsers  = main_parser.add_subparsers( )
+    for sub in self.__subcommands__:
+      parser = subparsers.add_parser(*sub.subcommand.args,
+                                    **sub.subcommand.kwargs)
+      parser.set_defaults(run=sub)
+      add_arguments(parser, getattr(sub, 'params', []))
 
 class metarator(object):
     """
@@ -173,12 +219,7 @@ class append_const(param):
     def __init__(self, *args, **kwargs):
         super(append_const, self).__init__(*args, action='append_const', **kwargs)
 
-class Application(object):
-    """
-    Barebones base class for command line applications.
-    """
-    __metaclass__ = Commando
-
+class BaseApp(object):
     def parse(self, argv):
         """
         Simple method that delegates to the ArgumentParser
@@ -198,3 +239,13 @@ class Application(object):
             args.run(self, args)
         else:
             self.__main__(args)  #pylint: disable-msg=E1101
+
+class WeirdApp(BaseApp, Subcommands):
+  __metaclass__ = Extent
+
+class Application(BaseApp):
+    """
+    Barebones base class for command line applications.
+    """
+    __metaclass__ = Commando
+
