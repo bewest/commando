@@ -4,6 +4,7 @@ Declarative interface for argparse
 """
 from argparse import ArgumentParser
 from collections import namedtuple
+from pprint import pprint
 
 # pylint: disable-msg=R0903,C0103,C0301
 
@@ -211,6 +212,9 @@ class Shim(object):
 
 class Base(Shim):
   def __init__(self, parser=None, func=None):
+    print 'base'
+    print 'main', self.main
+    print 'func', func
     super(Base, self).__init__(func=func)
     if parser is None:
       parser = ArgumentParser(*self.main.command.args,
@@ -237,21 +241,35 @@ class DecoratedShim(Base):
   """
   def __init__(self, parser=None, decor=None):
     self.decor = decor
-    super(DecoratedShim, self).__init__(func=func)
+    func = decor
+    if not callable(decor):
+      print(decor)
+      main_command, subcommands = self.traverse(decor)
+      pprint([main_command, subcommands])
+      pprint(main_command.command)
+      group     = Subcommands(parser      =parser,
+                              func        =main_command,
+                              subcommands =subcommands)
+      parser    = group.__parser__
+      #self.main = group
+      print "decor main command group:", group
+      super(DecoratedShim, self).__init__(parser=parser, func=group)
+    else:
+      super(DecoratedShim, self).__init__(func=func)
 
   def traverse(self, root):
     r = [ ]
     main_command = None
     subcommands  = [ ]
-    for name, member in root.__dict__.iteritems( ):
-      if getattr(member, "commando", False):
-        if hasattr(member, "command"):
-          main_command = member
-        elif hasattr(member, "subcommand"):
-          subcommands.append(member)
-          pass
-        elif hasattr(member, "params"):
-          pass
+    for name in dir(root):
+      member = getattr(root, name)
+      if callable(member):
+        if getattr(member, "commando", False):
+          if hasattr(member, "command"):
+            main_command = member
+          elif hasattr(member, "subcommand"):
+            subcommands.append(member)
+    return (main_command, subcommands)
 
 class DecoCommands(Base):
   def setup_parser(self):
@@ -260,9 +278,12 @@ class DecoCommands(Base):
 class Subcommands(Base):
   __subcommands__ = [ ]
   def __init__(self, parser=None, func=None, subcommands=None):
+    print "subcommands init func", func
+    print "subcommands func details", dir(func)
+    print "subcommands init func.command", func.command
     if subcommands is not None:
       self.__subcommands__ = subcommands
-    super(Subcommands, self).__init__(parser=parser)
+    super(Subcommands, self).__init__(parser=parser, func=func)
 
   def setup_parser(self):
     super(Subcommands, self).setup_parser( )
@@ -302,10 +323,14 @@ class TreeApp(BaseApp):
   def setup(self):
     # scan for decorated items, and mark them up for the subclass to
     # process
+    pprint(self.root.__dict__)
     self.__main__ = DecoratedShim(decor=self.root)
+    self.__parser__ = self.__main__.__parser__
+
   def parse(self, argv):
     self.setup( )
     return super(TreeApp, self).parse(argv)
+
   def __main__(self, params):
     print "no"
 
