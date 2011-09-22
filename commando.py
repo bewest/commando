@@ -82,37 +82,13 @@ class Extent(type):
                 main_command = member
             elif hasattr(member, "subcommand"):
                 subcommands.append(member)
-        main_parser = None
-
 
         instance.__subcommands__ = subcommands
-        instance.__parser__      = main_parser
+        instance.__parser__      = None
         instance.__main__        = main_command
         return instance
 
 values = namedtuple('__meta_values', 'args, kwargs')
-
-class Base(object):
-  def __init__(self):
-    self.setup_parser( )
-
-  def setup_parser(self):
-    main_command = self.__main__
-    main_parser  = ArgumentParser(*main_command.command.args,
-                                 **main_command.command.kwargs)
-    add_arguments(main_parser, getattr(main_command, 'params', []))
-    self.__parser__ = main_parser
-
-class Subcommands(Base):
-  def setup_parser(self):
-    super(Subcommands, self).setup_parser( )
-    main_parser = self.__parser__
-    subparsers  = main_parser.add_subparsers( )
-    for sub in self.__subcommands__:
-      parser = subparsers.add_parser(*sub.subcommand.args,
-                                    **sub.subcommand.kwargs)
-      parser.set_defaults(run=sub)
-      add_arguments(parser, getattr(sub, 'params', []))
 
 class metarator(object):
     """
@@ -127,6 +103,7 @@ class metarator(object):
         """
         Set the values object to the function object's namespace
         """
+        setattr(func, 'commando', True)
         setattr(func, name, self.values)
         return func
 
@@ -219,6 +196,84 @@ class append_const(param):
     def __init__(self, *args, **kwargs):
         super(append_const, self).__init__(*args, action='append_const', **kwargs)
 
+class Shim(object):
+  def __init__(self, func=None):
+    if func is not None:
+      self.main = func
+  def __call__(self, app, params):
+    self.app = app
+    self.main(params)
+  def main(self, params):
+    "Unimplemented"
+  def setup_parser(self):
+    pass
+    
+
+class Base(Shim):
+  def __init__(self, parser=None, func=None):
+    super(Base, self).__init__(func=func)
+    if parser is None:
+      parser = ArgumentParser(*self.main.command.args,
+                             **self.main.command.kwargs)
+    self.__parser__ = parser
+    self.setup_parser( )
+  def setup_parser(self):
+    main_command = self.main
+    main_parser  = self.__parser__
+    add_arguments(main_parser, getattr(main_command, 'params', [ ]))
+
+class DecoratedShim(Base):
+  """traverse a tree, looking for decorated callables
+  
+    A tree is an object hierarchy, where methods of the instance have properties.
+      
+      * command - The decoration given by the command decorator.
+        Represents a the default command callable for an entire new parser if
+        no parser is present.  If a parser is present, call add_subparsers
+        Use this as the main command for that entire parser.
+          hint: should be passed 
+
+      * subcommand - 
+  """
+  def __init__(self, parser=None, decor=None):
+    self.decor = decor
+    super(DecoratedShim, self).__init__(func=func)
+
+  def traverse(self, root):
+    r = [ ]
+    main_command = None
+    subcommands  = [ ]
+    for name, member in root.__dict__.iteritems( ):
+      if getattr(member, "commando", False):
+        if hasattr(member, "command"):
+          main_command = member
+        elif hasattr(member, "subcommand"):
+          subcommands.append(member)
+          pass
+        elif hasattr(member, "params"):
+          pass
+
+class DecoCommands(Base):
+  def setup_parser(self):
+    super(DecoCommands, self).setup_parser( )
+
+class Subcommands(Base):
+  __subcommands__ = [ ]
+  def __init__(self, parser=None, func=None, subcommands=None):
+    if subcommands is not None:
+      self.__subcommands__ = subcommands
+    super(Subcommands, self).__init__(parser=parser)
+
+  def setup_parser(self):
+    super(Subcommands, self).setup_parser( )
+    main_parser = self.__parser__
+    subparsers  = main_parser.add_subparsers( )
+    for sub in self.__subcommands__:
+      parser = subparsers.add_parser(*sub.subcommand.args,
+                                    **sub.subcommand.kwargs)
+      parser.set_defaults(run=sub)
+      add_arguments(parser, getattr(sub, 'params', []))
+
 class BaseApp(object):
     def parse(self, argv):
         """
@@ -239,6 +294,20 @@ class BaseApp(object):
             args.run(self, args)
         else:
             self.__main__(args)  #pylint: disable-msg=E1101
+
+class TreeApp(BaseApp):
+  def __init__(self, root=None):
+    self.root = root
+
+  def setup(self):
+    # scan for decorated items, and mark them up for the subclass to
+    # process
+    self.__main__ = DecoratedShim(decor=self.root)
+  def parse(self, argv):
+    self.setup( )
+    return super(TreeApp, self).parse(argv)
+  def __main__(self, params):
+    print "no"
 
 class WeirdApp(BaseApp, Subcommands):
   __metaclass__ = Extent
