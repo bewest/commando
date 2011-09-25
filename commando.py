@@ -215,9 +215,6 @@ class Shim(object):
 
 class Base(Shim):
   def __init__(self, parser=None, func=None):
-    print 'base'
-    print 'main', self.main
-    print 'func', func
     super(Base, self).__init__(func=func)
     if parser is None:
       parser = ArgumentParser(*self.main.command.args,
@@ -248,18 +245,13 @@ class DecoratedShim(Base):
     self.decor = decor
     func = decor
     if not callable(decor):
-      print('decorating root tree')
-      print(decor)
       main_command, subcommands = self.traverse(decor)
-      pprint([main_command, subcommands])
-      pprint(main_command.command)
       group     = Subcommands(parser      =parser,
                               func        =main_command,
                               subcommands =subcommands)
       parser    = group.__parser__
-      #self.main = group.main
-      print "decor main command group:", group
       super(DecoratedShim, self).__init__(parser=parser, func=group)
+
     else:
       super(DecoratedShim, self).__init__(func=func)
 
@@ -285,49 +277,28 @@ class Subcommands(Base):
   __subcommands__ = [ ]
   group           = None
   def __init__(self, parser=None, func=None, subcommands=None):
-    print "parser", parser
-    print "subcommands init func", func
-    print "subcommands func details", dir(func)
-    print "subcommands init func.command", func.command
     if subcommands is not None:
       self.__subcommands__ = subcommands
-    print 'FUNC', func
-    self.main_command = func
+
     self.main = func
-      
-
     super(Subcommands, self).__init__(parser=parser, func=func)
-
-  def broke(self):
-      if func is not None:
-          root = Base(func=func, parser=parser)
-          parser = root.__parser__
-          print 'base, func', root, func, func.func_name
-          group  = parser.add_subparsers(default=func.func_name)
-          self.group = group
-          parser = group.add_parser(func.func_name)
-          parser.set_defaults(run=self)
-          add_arguments(parser, getattr(root, 'params', []))
-
 
   def setup_parser(self):
     super(Subcommands, self).setup_parser( )
     main_parser = self.__parser__
-    subparsers  = self.group
     default = None
-    if self.main_command is not None:
-      print "MAIN COMMAND", self.main_command
-      if not hasattr(self.main_command, 'subcommand'):
-        name = self.main_command.func_name
-        #self.main_command.subcommand = values._make((name, dict(help="my main command")))
-        subcommand(name, help="my main command")(self.main_command.im_func)
-      default = self.main_command.func_name
-    if subparsers is None:
-      subparsers = main_parser.add_subparsers(default=default)
 
     # setup main command
-    #root = Base(func=self.main_command, parser = )
-    self.__subcommands__.append(self.main_command)
+    if self.main is not None:
+      if not hasattr(self.main, 'subcommand'):
+        name = self.main.func_name
+        subcommand(name, help="my main command")(self.main.im_func)
+      default = self.main.func_name
+      # add it as another subcommand
+      self.__subcommands__.append(self.main)
+
+    subparsers = main_parser.add_subparsers(default=default)
+
     for sub in self.__subcommands__:
       parser = subparsers.add_parser(*sub.subcommand.args,
                                     **sub.subcommand.kwargs)
