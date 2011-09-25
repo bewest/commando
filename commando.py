@@ -78,6 +78,9 @@ class Extent(type):
         main_command = None
         # scan for decorated items, and mark them up for the subclass to
         # process
+        # attrs is all the properties of the class to be combined with all it's
+        # sublcasses.  This spot in the metaclass is the easiest way to
+        # traverse an object in this way.
         for name, member in attrs.iteritems():
             if hasattr(member, "command"):
                 main_command = member
@@ -230,6 +233,8 @@ class DecoratedShim(Base):
   """traverse a tree, looking for decorated callables
   
     A tree is an object hierarchy, where methods of the instance have properties.
+    The properties set on function descriptors of the instance are most easily
+    influenced using the decorators on a plain old object.
       
       * command - The decoration given by the command decorator.
         Represents a the default command callable for an entire new parser if
@@ -243,6 +248,7 @@ class DecoratedShim(Base):
     self.decor = decor
     func = decor
     if not callable(decor):
+      print('decorating root tree')
       print(decor)
       main_command, subcommands = self.traverse(decor)
       pprint([main_command, subcommands])
@@ -251,7 +257,7 @@ class DecoratedShim(Base):
                               func        =main_command,
                               subcommands =subcommands)
       parser    = group.__parser__
-      #self.main = group
+      #self.main = group.main
       print "decor main command group:", group
       super(DecoratedShim, self).__init__(parser=parser, func=group)
     else:
@@ -277,18 +283,51 @@ class DecoCommands(Base):
 
 class Subcommands(Base):
   __subcommands__ = [ ]
+  group           = None
   def __init__(self, parser=None, func=None, subcommands=None):
+    print "parser", parser
     print "subcommands init func", func
     print "subcommands func details", dir(func)
     print "subcommands init func.command", func.command
     if subcommands is not None:
       self.__subcommands__ = subcommands
+    print 'FUNC', func
+    self.main_command = func
+    self.main = func
+      
+
     super(Subcommands, self).__init__(parser=parser, func=func)
+
+  def broke(self):
+      if func is not None:
+          root = Base(func=func, parser=parser)
+          parser = root.__parser__
+          print 'base, func', root, func, func.func_name
+          group  = parser.add_subparsers(default=func.func_name)
+          self.group = group
+          parser = group.add_parser(func.func_name)
+          parser.set_defaults(run=self)
+          add_arguments(parser, getattr(root, 'params', []))
+
 
   def setup_parser(self):
     super(Subcommands, self).setup_parser( )
     main_parser = self.__parser__
-    subparsers  = main_parser.add_subparsers( )
+    subparsers  = self.group
+    default = None
+    if self.main_command is not None:
+      print "MAIN COMMAND", self.main_command
+      if not hasattr(self.main_command, 'subcommand'):
+        name = self.main_command.func_name
+        #self.main_command.subcommand = values._make((name, dict(help="my main command")))
+        subcommand(name, help="my main command")(self.main_command.im_func)
+      default = self.main_command.func_name
+    if subparsers is None:
+      subparsers = main_parser.add_subparsers(default=default)
+
+    # setup main command
+    #root = Base(func=self.main_command, parser = )
+    self.__subcommands__.append(self.main_command)
     for sub in self.__subcommands__:
       parser = subparsers.add_parser(*sub.subcommand.args,
                                     **sub.subcommand.kwargs)
@@ -323,7 +362,6 @@ class TreeApp(BaseApp):
   def setup(self):
     # scan for decorated items, and mark them up for the subclass to
     # process
-    pprint(self.root.__dict__)
     self.__main__ = DecoratedShim(decor=self.root)
     self.__parser__ = self.__main__.__parser__
 
