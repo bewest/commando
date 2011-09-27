@@ -2,6 +2,7 @@
 """
 Declarative interface for argparse
 """
+import argparse
 from argparse import ArgumentParser
 from collections import namedtuple
 from pprint import pprint
@@ -288,16 +289,21 @@ class Subcommands(Base):
     main_parser = self.__parser__
     default = None
 
+    sub_kwds = dict(default=default)
     # setup main command
     if self.main is not None:
       if not hasattr(self.main, 'subcommand'):
         name = self.main.func_name
-        subcommand(name, help="my main command")(self.main.im_func)
-      default = self.main.func_name
+        subcommand(name, help="my help command main")(self.main.im_func)
+        sub_kwds['dest'] = argparse.SUPPRESS
+        default = self.main.func_name
+      else:
+        default = self.main.im_func.subcommand.args[0]
+      sub_kwds['default'] = default
       # add it as another subcommand
       self.__subcommands__.append(self.main)
 
-    subparsers = main_parser.add_subparsers(default=default)
+    subparsers = main_parser.add_subparsers(**sub_kwds)
 
     for sub in self.__subcommands__:
       parser = subparsers.add_parser(*sub.subcommand.args,
