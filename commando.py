@@ -291,6 +291,9 @@ class DecoratedShim(Base):
       if main or subs:
         pprint(['branching? %s' % name, member, ]) # vars(member)])
         pprint(['found main', 'subs', main, subs])
+        if not main and callable(root):
+          root.im_func.branch = False
+          main = root
         #branches.append(
         group  = Subcommands(parser      =parser,
                              func        =main,
@@ -327,12 +330,13 @@ class Subcommands(Base):
     main_parser = self.__parser__
     default = None
 
+    # XXX; get these from branch or from some decoration
     sub_kwds = dict(default=default)
     # setup main command
     if self.main is not None:
       if not hasattr(self.main, 'subcommand'):
         name = self.main.func_name
-        subcommand(name, help="my help command main")(self.main.im_func)
+        subcommand(name )(self.main.im_func)
         sub_kwds['dest'] = argparse.SUPPRESS
         default = self.main.func_name
       else:
