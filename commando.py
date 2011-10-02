@@ -9,6 +9,15 @@ from pprint import pprint
 
 # pylint: disable-msg=R0903,C0103,C0301
 
+_hack = 0
+import sys
+def HACK():
+  global _hack
+  _hack += 1
+  if _hack > 10:
+    raise Exception("OVERFLOW HACK: %s" % _hack)
+    sys.exit(1)
+
 try:
     import pkg_resources
     __version__ = pkg_resources.get_distribution('commando').version
@@ -243,19 +252,52 @@ class DecoratedShim(Base):
       * subcommand - 
   """
   def __init__(self, parser=None, decor=None):
+    HACK( )
     self.decor = decor
     func = decor
     if not callable(decor):
       main_command, subcommands = self.traverse(decor)
-      group     = Subcommands(parser      =parser,
-                              func        =main_command,
-                              subcommands =subcommands)
-      parser    = group.__parser__
-      super(DecoratedShim, self).__init__(parser=parser, func=group)
+      group  = Subcommands(parser      =parser,
+                           func        =main_command,
+                           subcommands =subcommands)
+      parser = group.__parser__
+      func   = group
+      super(DecoratedShim, self).__init__(parser=parser, func=func)
 
     else:
-      super(DecoratedShim, self).__init__(func=func)
+      pprint(['DECOR is a callable!', decor, vars(decor)])
+      main_command, subcommands = self.traverse(decor)
+      if main_command is None:
+        main_command = decor
+        func = decor
+      pprint(['main, subs', main_command, subcommands])
+      pprint(['parser', parser])
+      if decor.commando and decor.branch:
+        print "HAHAHA"
+        branches = self.branch(parser)
+        pprint(['branches', branches])
 
+        #func   = group
+      #super(DecoratedShim, self).__init__(parser=parser, func=func)
+  
+
+  def branch(self, parser):
+    root     = self.decor
+    branches = [ ]
+    
+    for name in getattr(root, 'branches', [ ]):
+      member = getattr(root, name)
+      main, subs = self.traverse(member)
+      if main or subs:
+        pprint(['branching? %s' % name, member, ]) # vars(member)])
+        pprint(['found main', 'subs', main, subs])
+        #branches.append(
+        group  = Subcommands(parser      =parser,
+                             func        =main,
+                             subcommands =subs)
+        branches.append(group)
+    return branches
+    
   def traverse(self, root):
     r = [ ]
     main_command = None
@@ -269,10 +311,6 @@ class DecoratedShim(Base):
           elif hasattr(member, "subcommand"):
             subcommands.append(member)
     return (main_command, subcommands)
-
-class DecoCommands(Base):
-  def setup_parser(self):
-    super(DecoCommands, self).setup_parser( )
 
 class Subcommands(Base):
   __subcommands__ = [ ]
@@ -298,7 +336,14 @@ class Subcommands(Base):
         sub_kwds['dest'] = argparse.SUPPRESS
         default = self.main.func_name
       else:
-        default = self.main.im_func.subcommand.args[0]
+        pprint(['considering', self.main, vars(self.main)])
+        pprint(['on behalf of ', self.__subcommands__])
+        pprint(['for parser ', main_parser])
+        if hasattr(self.main, 'subcommand'):
+          default = self.main.subcommand.args[0]
+          pprint(self.main.subcommand)
+        else:
+          default = self.main.im_func.subcommand.args[0]
       sub_kwds['default'] = default
       # add it as another subcommand
       self.__subcommands__.append(self.main)
@@ -306,9 +351,17 @@ class Subcommands(Base):
     subparsers = main_parser.add_subparsers(**sub_kwds)
 
     for sub in self.__subcommands__:
+      pprint(['add a new parser:', sub, vars(sub), sub.subcommand])
       parser = subparsers.add_parser(*sub.subcommand.args,
                                     **sub.subcommand.kwargs)
-      parser.set_defaults(run=sub)
+      if getattr(sub, 'branch', False):
+        print "FOUND A BRANCH"
+        pprint(['sub', sub, vars(sub), ])
+                       #sub.im_func, vars(sub.im_func)])
+        DecoratedShim(parser=parser, decor=sub)
+        #setattr(sub.im_func, 'branch', False)
+      else:
+        parser.set_defaults(run=sub)
       add_arguments(parser, getattr(sub, 'params', []))
 
 class BaseApp(object):
@@ -358,3 +411,5 @@ class Application(BaseApp):
     """
     __metaclass__ = Commando
 
+#####
+# EOF
