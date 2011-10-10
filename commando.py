@@ -265,17 +265,17 @@ class DecoratedShim(Base):
       super(DecoratedShim, self).__init__(parser=parser, func=func)
 
     else:
-      pprint(['DECOR is a callable!', decor, vars(decor)])
+      #pprint(['DECOR is a callable!', decor, vars(decor)])
       main_command, subcommands = self.traverse(decor)
       if main_command is None:
         main_command = decor
         func = decor
-      pprint(['main, subs', main_command, subcommands])
-      pprint(['parser', parser])
+      #pprint(['main, subs', main_command, subcommands])
+      #pprint(['parser', parser])
       if decor.commando and decor.branch:
         print "HAHAHA"
         branches = self.branch(parser)
-        pprint(['branches', branches])
+        #pprint(['branches', branches])
 
         #func   = group
       #super(DecoratedShim, self).__init__(parser=parser, func=func)
@@ -289,8 +289,8 @@ class DecoratedShim(Base):
       member = getattr(root, name)
       main, subs = self.traverse(member)
       if main or subs:
-        pprint(['branching? %s' % name, member, ]) # vars(member)])
-        pprint(['found main', 'subs', main, subs])
+        #pprint(['branching? %s' % name, member, ]) # vars(member)])
+        #pprint(['found main', 'subs', main, subs])
         if not main and callable(root):
           root.im_func.branch = False
           main = root
@@ -340,32 +340,36 @@ class Subcommands(Base):
         sub_kwds['dest'] = argparse.SUPPRESS
         default = self.main.func_name
       else:
-        pprint(['considering', self.main, vars(self.main)])
-        pprint(['on behalf of ', self.__subcommands__])
-        pprint(['for parser ', main_parser])
+        #pprint(['considering', self.main, vars(self.main)])
+        #pprint(['on behalf of ', self.__subcommands__])
+        #pprint(['for parser ', main_parser])
         if hasattr(self.main, 'subcommand'):
           default = self.main.subcommand.args[0]
-          pprint(self.main.subcommand)
+          #pprint(self.main.subcommand)
         else:
           default = self.main.im_func.subcommand.args[0]
       sub_kwds['default'] = default
       # add it as another subcommand
       self.__subcommands__.append(self.main)
 
+    # XXX: add_subparsers
     subparsers = main_parser.add_subparsers(**sub_kwds)
 
     for sub in self.__subcommands__:
-      pprint(['add a new parser:', sub, vars(sub), sub.subcommand])
+      #pprint(['add a new parser:', sub, vars(sub), sub.subcommand])
+      # XXX: add_parser
       parser = subparsers.add_parser(*sub.subcommand.args,
                                     **sub.subcommand.kwargs)
+      # XXX: set_defaults or recurse?
       if getattr(sub, 'branch', False):
-        print "FOUND A BRANCH"
-        pprint(['sub', sub, vars(sub), ])
+        #print "FOUND A BRANCH"
+        #pprint(['sub', sub, vars(sub), ])
                        #sub.im_func, vars(sub.im_func)])
         DecoratedShim(parser=parser, decor=sub)
         #setattr(sub.im_func, 'branch', False)
       else:
         parser.set_defaults(run=sub)
+      # XXX: add_arguments
       add_arguments(parser, getattr(sub, 'params', []))
 
 class BaseApp(object):
